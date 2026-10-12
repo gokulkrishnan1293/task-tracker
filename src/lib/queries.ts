@@ -46,7 +46,7 @@ export async function loadProject(slug: string) {
 export type ProjectSummary = Project & Stats & { module_count: number; people: string; last_activity: string | null };
 
 export function projectsFor(user: User): ProjectSummary[] {
-  const scope = user.is_site_admin ? "1=1" : "p.id IN (SELECT project_id FROM project_members WHERE user_id = @uid)";
+  const scope = user.is_site_admin ? "@uid IS NOT NULL" : "p.id IN (SELECT project_id FROM project_members WHERE user_id = @uid)";
   return db
     .prepare(
       `SELECT p.*,
@@ -144,7 +144,7 @@ export function activityFor(taskId: number): ActivityItem[] {
          FROM task_notes n LEFT JOIN users u ON u.id = n.author_id
         WHERE n.task_id = ? AND n.deleted_at IS NULL`,
     )
-    .all(taskId) as Omit<Extract<ActivityItem, { kind: "note" }>, "kind">[];
+    .all(taskId) as unknown as (Omit<Extract<ActivityItem, { kind: "note" }>, "kind" | "edited"> & { edited: number })[];
   const changes = db
     .prepare(
       `SELECT c.id, c.created_at at, u.name actor, c.action, c.field, c.old_value, c.new_value

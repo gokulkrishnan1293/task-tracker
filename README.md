@@ -3,10 +3,26 @@
 Project → module → task tracker with roles, review flow, notes and full change history.
 One Next.js service with a single SQLite file.
 
+## Requirements
+
+**Node.js 22.13 or newer**, and nothing else. It works the same on Linux and Windows.
+
+- The database is SQLite via Node's built-in `node:sqlite`, so there are no native modules, nothing compiles at install, and no Visual Studio, Python or build tools are needed.
+- No package runs an install script.
+- The only platform-specific pieces are the prebuilt binaries every Next.js app uses (the Next compiler, Tailwind, lightningcss). npm picks the right one for your OS from the npm registry.
+- Node prints a one-line "SQLite is experimental" notice at start; it's harmless. The pm2 config hides it.
+
+## Run locally (Windows or Linux)
+
+```bash
+npm ci
+npm run dev          # http://localhost:3000
+```
+
 ## Run on your server with pm2
 
 ```bash
-npm ci                 # also builds the better-sqlite3 native module for your server
+npm ci
 npm run build
 pm2 start ecosystem.config.js
 pm2 save               # keep it running across reboots (run `pm2 startup` once if you haven't)
@@ -30,10 +46,10 @@ The schema is created automatically and safely on start; nothing to migrate.
 ## Backups
 
 ```bash
-npm run backup        # consistent snapshot into data/backups/, keeps the last 14
+npm run backup        # consistent snapshot into data/backups/ (next to the database), keeps the last 14
 ```
 
-It's safe while the app is running. To run it daily with cron:
+It's safe while the app is running. To run it daily on Linux with cron (on Windows, use Task Scheduler with the same command):
 
 ```
 0 2 * * * cd /path/to/task-tracker && npm run backup >> logs/backup.log 2>&1
@@ -47,7 +63,7 @@ On the server:
 npm run create-admin -- gokul "Gokul"
 ```
 
-This resets that user's password (or creates the user), makes them site admin, and prints a temporary password.
+This resets that user's password (or creates the user), makes them site admin, and prints a temporary password. The app must have run once so the database exists.
 
 ## How it works
 
@@ -87,6 +103,6 @@ src/lib/guard.ts           permission checks, change logging
 src/app/actions/           server actions (tasks.ts, admin.ts, auth.ts) - all writes and rules
 src/app/p/[slug]/...       project, members, module pages
 src/components/TaskBoard.tsx / TaskPanel.tsx   table + side panel
-scripts/                   backup, create-admin
+scripts/                   backup, create-admin (plain Node, no extra tools)
 ecosystem.config.js        pm2
 ```

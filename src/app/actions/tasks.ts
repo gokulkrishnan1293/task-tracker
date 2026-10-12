@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
+import type { SQLInputValue } from "node:sqlite";
 import { db, tx } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { roleIn } from "@/lib/queries";
@@ -92,8 +93,8 @@ export async function updateTask(taskId: number, raw: TaskPatch) {
 
     tx(() => {
       const sets: string[] = [];
-      const vals: unknown[] = [];
-      const set = (col: string, v: unknown) => (sets.push(`${col} = ?`), vals.push(v));
+      const vals: SQLInputValue[] = [];
+      const set = (col: string, v: SQLInputValue) => (sets.push(`${col} = ?`), vals.push(v));
 
       if (patch.title !== undefined && patch.title !== task.title) {
         set("title", patch.title);

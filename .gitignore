@@ -4,3 +4,5 @@ data/*.db*
 data/backups
 logs
 .env*
+next-env.d.ts
+*.tsbuildinfo

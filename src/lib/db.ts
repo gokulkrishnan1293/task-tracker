@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import { DatabaseSync, type SQLInputValue, type SQLOutputValue } from "node:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -99,17 +99,43 @@ CREATE INDEX IF NOT EXISTS ix_changes_task ON task_changes(task_id, created_at);
 
 function open() {
   fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
-  const db = new Database(DB_PATH);
-  db.pragma("journal_mode = WAL");
-  db.pragma("foreign_keys = ON");
-  db.pragma("busy_timeout = 5000");
+  const db = new DatabaseSync(DB_PATH);
+  db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   db.exec(SCHEMA);
   return db;
 }
 
 // One connection per process; survive hot reloads in dev.
-const g = globalThis as unknown as { __db?: Database.Database };
-export const db: Database.Database = g.__db ?? open();
-if (process.env.NODE_ENV !== "production") g.__db = db;
+const g = globalThis as unknown as { __db?: DatabaseSync };
+const raw: DatabaseSync = g.__db ?? open();
+if (process.env.NODE_ENV !== "production") g.__db = raw;
 
-export const tx = <T>(fn: () => T): T => db.transaction(fn)();
+type Row = Record<string, SQLOutputValue>;
+// node:sqlite returns null-prototype rows; React can't pass those to client components.
+const plain = (r: Row | undefined): Row | undefined => (r ? { ...r } : r);
+
+/** Thin wrapper over node:sqlite: same prepare/get/all/run/exec, but rows are plain objects. */
+export const db = {
+  prepare(sql: string) {
+    const s = raw.prepare(sql);
+    return {
+      get: (...params: SQLInputValue[] | [Record<string, SQLInputValue>]) => plain(s.get(...(params as SQLInputValue[]))),
+      all: (...params: SQLInputValue[] | [Record<string, SQLInputValue>]) => s.all(...(params as SQLInputValue[])).map((r) => ({ ...r })),
+      run: (...params: SQLInputValue[] | [Record<string, SQLInputValue>]) => s.run(...(params as SQLInputValue[])),
+    };
+  },
+  exec: (sql: string) => raw.exec(sql),
+};
+
+/** Runs fn in a transaction; rolls back if it throws. (Calls are synchronous, so they never interleave.) */
+export function tx<T>(fn: () => T): T {
+  db.exec("BEGIN IMMEDIATE");
+  try {
+    const result = fn();
+    db.exec("COMMIT");
+    return result;
+  } catch (e) {
+    db.exec("ROLLBACK");
+    throw e;
+  }
+}

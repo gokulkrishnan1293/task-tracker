@@ -10,6 +10,7 @@ module.exports = {
       exec_mode: "fork",
       autorestart: true,
       max_memory_restart: "512M",
+      node_args: "--disable-warning=ExperimentalWarning", // node:sqlite prints a one-time notice
       env: {
         NODE_ENV: "production",
         DB_PATH: __dirname + "/data/tracker.db",
