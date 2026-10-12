@@ -53,6 +53,20 @@ CREATE TABLE IF NOT EXISTS modules (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS ux_modules_slug ON modules(project_id, slug) WHERE deleted_at IS NULL;
 
+-- Weekly goals live at project level; tasks from any module link to one.
+CREATE TABLE IF NOT EXISTS goals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  project_id INTEGER NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  week_start TEXT NOT NULL,           -- Monday of the week, yyyy-mm-dd
+  title TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  deleted_at TEXT,
+  carried_from INTEGER REFERENCES goals(id) ON DELETE SET NULL  -- the previous week's goal this continues
+);
+CREATE INDEX IF NOT EXISTS ix_goals_week ON goals(project_id, week_start);
+
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   module_id INTEGER NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
@@ -68,7 +82,9 @@ CREATE TABLE IF NOT EXISTS tasks (
   completed_at TEXT,
   acknowledged_at TEXT,               -- NULL = created by a member, not yet seen by an admin
   deleted_at TEXT,
-  deleted_with_module INTEGER NOT NULL DEFAULT 0
+  deleted_with_module INTEGER NOT NULL DEFAULT 0,
+  goal_id INTEGER REFERENCES goals(id) ON DELETE SET NULL,
+  goal_linked_at TEXT                 -- when the task was linked to its current goal
 );
 CREATE INDEX IF NOT EXISTS ix_tasks_module ON tasks(module_id, deleted_at, status);
 CREATE INDEX IF NOT EXISTS ix_tasks_owner ON tasks(owner_id);
@@ -102,7 +118,20 @@ function open() {
   const db = new DatabaseSync(DB_PATH);
   db.exec("PRAGMA journal_mode = WAL; PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;");
   db.exec(SCHEMA);
+  migrate(db);
   return db;
+}
+
+/** Additive changes for databases created by earlier versions. Each step is safe to re-run. */
+function migrate(db: DatabaseSync) {
+  const cols = (table: string) => (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  const add = (table: string, col: string, def: string) => {
+    if (!cols(table).includes(col)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def}`);
+  };
+  add("tasks", "goal_id", "INTEGER REFERENCES goals(id) ON DELETE SET NULL");
+  add("tasks", "goal_linked_at", "TEXT");
+  add("goals", "carried_from", "INTEGER REFERENCES goals(id) ON DELETE SET NULL");
+  db.exec("CREATE INDEX IF NOT EXISTS ix_tasks_goal ON tasks(goal_id)");
 }
 
 // One connection per process; survive hot reloads in dev.

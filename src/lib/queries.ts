@@ -2,7 +2,7 @@ import "server-only";
 import { notFound } from "next/navigation";
 import { db } from "./db";
 import { requireUser } from "./auth";
-import type { ActivityItem, Member, Module, Project, Role, Stats, TaskRow, User } from "./types";
+import type { ActivityItem, GoalOption, GoalSummary, GoalTask, Member, Module, Project, Role, Stats, TaskRow, User } from "./types";
 import { STALE_DAYS } from "./util";
 
 /** Same rule as attentionOf() in util.ts, for aggregates. Expects the tasks table aliased as t. */
@@ -126,11 +126,12 @@ export function moduleBySlug(projectId: number, slug: string) {
 export function tasksIn(moduleId: number, includeDeleted: boolean): TaskRow[] {
   return db
     .prepare(
-      `SELECT t.*, o.name owner_name, c.name created_by_name,
+      `SELECT t.*, o.name owner_name, c.name created_by_name, g.title goal_title, g.week_start goal_week,
               (SELECT count(*) FROM task_notes n WHERE n.task_id = t.id AND n.deleted_at IS NULL) note_count
          FROM tasks t
          LEFT JOIN users o ON o.id = t.owner_id
          LEFT JOIN users c ON c.id = t.created_by
+         LEFT JOIN goals g ON g.id = t.goal_id AND g.deleted_at IS NULL
         WHERE t.module_id = ? AND (t.deleted_at IS NULL ${includeDeleted ? "OR t.deleted_with_module = 0" : ""})
         ORDER BY t.sort_order, t.id`,
     )
@@ -181,4 +182,51 @@ export function allUsers() {
          FROM users u ORDER BY u.disabled_at IS NOT NULL, u.name`,
     )
     .all() as (User & { disabled_at: string | null; created_at: string; projects: string | null })[];
+}
+
+// ── Weekly goals ─────────────────────────────────────────────────────────
+
+/** Goals for one week with progress from their linked (live) tasks. */
+export function goalsForWeek(projectId: number, weekStart: string): GoalSummary[] {
+  const goals = db
+    .prepare(
+      `SELECT g.id, g.title, g.week_start, g.created_by, g.created_at, g.carried_from, u.name created_by_name,
+              prev.week_start carried_from_week,
+              (SELECT n.week_start FROM goals n WHERE n.carried_from = g.id AND n.deleted_at IS NULL LIMIT 1) carried_to_week
+         FROM goals g
+         LEFT JOIN users u ON u.id = g.created_by
+         LEFT JOIN goals prev ON prev.id = g.carried_from
+        WHERE g.project_id = ? AND g.week_start = ? AND g.deleted_at IS NULL
+        ORDER BY g.sort_order, g.id`,
+    )
+    .all(projectId, weekStart) as unknown as Omit<GoalSummary, "total" | "done" | "tasks">[];
+  if (!goals.length) return [];
+
+  const tasks = db
+    .prepare(
+      `SELECT t.id, t.title, t.status, t.goal_id, t.goal_linked_at, o.name owner_name, m.name module_name, m.slug module_slug
+         FROM tasks t
+         JOIN goals g ON g.id = t.goal_id
+         JOIN modules m ON m.id = t.module_id AND m.deleted_at IS NULL
+         LEFT JOIN users o ON o.id = t.owner_id
+        WHERE g.project_id = ? AND g.week_start = ? AND t.deleted_at IS NULL
+        ORDER BY t.status = 'done', m.sort_order, t.id`,
+    )
+    .all(projectId, weekStart) as unknown as (GoalTask & { goal_id: number })[];
+
+  return goals.map((g) => {
+    const mine = tasks.filter((t) => t.goal_id === g.id);
+    return { ...g, total: mine.length, done: mine.filter((t) => t.status === "done").length, tasks: mine };
+  });
+}
+
+/** Goals a task can be linked to: last week onward, newest weeks last. */
+export function goalOptions(projectId: number, fromWeek: string): GoalOption[] {
+  return db
+    .prepare(
+      `SELECT id, title, week_start FROM goals
+        WHERE project_id = ? AND deleted_at IS NULL AND week_start >= ?
+        ORDER BY week_start, sort_order, id`,
+    )
+    .all(projectId, fromWeek) as GoalOption[];
 }

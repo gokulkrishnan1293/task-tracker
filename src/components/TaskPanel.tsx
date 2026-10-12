@@ -11,8 +11,9 @@ import {
   sendBack,
   type TaskPatch,
 } from "@/app/actions/tasks";
-import type { ActivityItem, TaskRow } from "@/lib/types";
-import { attentionOf, cx, formatDate, timeAgo } from "@/lib/util";
+import type { ActivityItem, GoalOption, TaskRow } from "@/lib/types";
+import GoalSelect from "./GoalSelect";
+import { attentionOf, cx, formatDate, timeAgo, weekRange } from "@/lib/util";
 import { Button, inputBase, textareaCls } from "./ui";
 import { StatusSelect, type Person } from "./StatusSelect";
 
@@ -21,6 +22,7 @@ export default function TaskPanel({
   activity,
   members,
   modules,
+  goals,
   me,
   isAdmin,
   editable,
@@ -34,6 +36,7 @@ export default function TaskPanel({
   activity: ActivityItem[] | null;
   members: Person[];
   modules: Person[];
+  goals: GoalOption[];
   me: Person;
   isAdmin: boolean;
   editable: boolean;
@@ -173,6 +176,27 @@ export default function TaskPanel({
                 </select>
               ) : (
                 modules.find((m) => m.id === t.module_id)?.name
+              )}
+            </dd>
+
+            <dt className="text-muted">Goal</dt>
+            <dd>
+              {editable ? (
+                <GoalSelect
+                  key={t.goal_id ?? "none"}
+                  goals={goals}
+                  value={t.goal_id ? String(t.goal_id) : ""}
+                  extra={t.goal_id && t.goal_title && t.goal_week ? { id: t.goal_id, title: t.goal_title, week_start: t.goal_week } : null}
+                  onChange={(v) => onSave({ goalId: v ? Number(v) : null })}
+                  className={cx(inputBase, "w-auto max-w-full", !t.goal_id && "text-muted")}
+                  aria-label="Weekly goal"
+                />
+              ) : t.goal_title && t.goal_week ? (
+                <span>
+                  ◎ {t.goal_title} <span className="text-muted">· {weekRange(t.goal_week)}</span>
+                </span>
+              ) : (
+                <span className="text-muted">None</span>
               )}
             </dd>
 
@@ -347,7 +371,7 @@ function Activity({ items, me, isAdmin, onError }: { items: ActivityItem[] | nul
           ) : (
             <li key={`c${i.id}`} className="flex gap-2 text-[13px]">
               <span className="w-4 shrink-0 text-center text-muted" aria-hidden>
-                {i.action === "created" ? "＋" : i.action === "deleted" ? "🗑" : i.action === "sent_back" ? "↩" : "↻"}
+                {i.action === "created" ? "＋" : i.action === "deleted" ? "🗑" : i.action === "sent_back" ? "↩" : i.field === "goal" || i.action === "carried" ? "◎" : "↻"}
               </span>
               <div className="min-w-0 text-muted">
                 <span className="font-medium text-fg">{i.actor ?? "Someone"}</span> {describeChange(i)}
@@ -455,6 +479,8 @@ function describeChange(c: Extract<ActivityItem, { kind: "change" }>): React.Rea
       return <>sent it back for changes ({arrow(c.old_value, c.new_value)})</>;
     case "moved":
       return <>moved it from {arrow(c.old_value, c.new_value)}</>;
+    case "carried":
+      return <>carried it forward to {b(c.new_value)}</>;
     case "note_edited":
       return "edited a note";
     case "note_deleted":
@@ -471,6 +497,10 @@ function describeChange(c: Extract<ActivityItem, { kind: "change" }>): React.Rea
       if (!c.old_value) return <>set the due date to {b(formatDate(c.new_value, true))}</>;
       if (!c.new_value) return <>removed the due date ({formatDate(c.old_value, true)})</>;
       return <>changed the due date {arrow(formatDate(c.old_value, true), formatDate(c.new_value, true))}</>;
+    case "goal":
+      if (!c.old_value) return <>linked it to goal {b(c.new_value)}</>;
+      if (!c.new_value) return <>unlinked it from goal {b(c.old_value)}</>;
+      return <>moved it to goal {arrow(c.old_value, c.new_value)}</>;
     case "title":
       return (
         <>

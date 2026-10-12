@@ -4,6 +4,7 @@ import { db } from "./db";
 import { requireUser } from "./auth";
 import { roleIn } from "./queries";
 import type { Role, Status, User } from "./types";
+import { weekRange } from "./util";
 
 export class Denied extends Error {}
 
@@ -40,6 +41,7 @@ export type TaskCtx = {
     due_date: string | null;
     deleted_at: string | null;
     acknowledged_at: string | null;
+    goal_id: number | null;
   };
 };
 
@@ -47,7 +49,7 @@ export async function taskCtx(taskId: number): Promise<TaskCtx> {
   const user = await requireUser();
   const task = db
     .prepare(
-      `SELECT t.id, t.module_id, t.title, t.status, t.owner_id, t.due_date, t.deleted_at, t.acknowledged_at, m.project_id
+      `SELECT t.id, t.module_id, t.title, t.status, t.owner_id, t.due_date, t.deleted_at, t.acknowledged_at, t.goal_id, m.project_id
          FROM tasks t JOIN modules m ON m.id = t.module_id WHERE t.id = ?`,
     )
     .get(taskId) as (TaskCtx["task"] & { project_id: number }) | undefined;
@@ -91,4 +93,19 @@ export function uniqueSlug(base: string, exists: (s: string) => boolean) {
   let slug = base;
   for (let i = 2; exists(slug); i++) slug = `${base}-${i}`;
   return slug;
+}
+
+/** Goal name for history, with its week, since a carried-forward goal keeps its title. */
+export function goalTitle(id: number | null) {
+  if (id == null) return null;
+  const g = db.prepare("SELECT title, week_start FROM goals WHERE id = ?").get(id) as { title: string; week_start: string } | undefined;
+  return g ? `${g.title} (${weekRange(g.week_start)})` : null;
+}
+
+/** A live goal in this project, or a permission error. */
+export function goalInProject(goalId: number, projectId: number) {
+  const g = db.prepare("SELECT id, project_id FROM goals WHERE id = ? AND deleted_at IS NULL").get(goalId) as
+    | { id: number; project_id: number }
+    | undefined;
+  check(g?.project_id === projectId, "Pick a goal in this project.");
 }

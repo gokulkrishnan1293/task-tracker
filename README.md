@@ -32,6 +32,7 @@ Open `http://<server>:3000`. **The first visit asks you to create the site admin
 
 - **Port:** change `args: "start -p 3000"` in `ecosystem.config.js`.
 - **Database:** `data/tracker.db`, created on first start. Override it with `DB_PATH`.
+- **Timezone:** weeks and "overdue" follow `TZ` in `ecosystem.config.js` (set to `Asia/Kolkata`).
 - **Keep `instances: 1`.** SQLite has one writer; cluster mode would run several processes against it.
 - **HTTPS:** if it's behind a reverse proxy with HTTPS, set `COOKIE_SECURE: "true"` in the pm2 env.
 
@@ -41,7 +42,7 @@ Open `http://<server>:3000`. **The first visit asks you to create the site admin
 git pull && npm ci && npm run build && pm2 reload task-tracker
 ```
 
-The schema is created automatically and safely on start; nothing to migrate.
+The schema is created and upgraded automatically on start (new tables and columns are added to an existing database; nothing is dropped).
 
 ## Backups
 
@@ -68,6 +69,8 @@ This resets that user's password (or creates the user), makes them site admin, a
 ## How it works
 
 **Screens:** projects → module cards → module task table. Click a row to open the side panel. Use ↑/↓ (or J/K) to step through tasks, N to add a note, Esc to close. The open task is in the URL, so links can be shared.
+
+**Weekly goals (project level):** anyone in the project can add a goal for a week (Monday to Sunday) and link tasks from any module to it, either from the add-task row or from a task's side panel. Progress is the done count over the linked tasks, and a goal shows ✓ Met when all are done. Tasks linked after the goal was set show "added <day>". **Carry forward** creates the goal in the next week and moves its unfinished tasks there; done tasks stay credited to the original week. The goal's creator or an admin can rename, carry forward or delete it. Every link, unlink and carry-forward is in the task's history.
 
 **Statuses:** Not Started → In Progress → In Review → Done, plus Blocked.
 

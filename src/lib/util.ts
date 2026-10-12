@@ -70,3 +70,43 @@ export const pct = (done: number, total: number) => (total ? Math.round((done / 
 export function cx(...c: (string | false | null | undefined)[]) {
   return c.filter(Boolean).join(" ");
 }
+
+// ── Weeks (Monday start, local time) ─────────────────────────────────────
+
+const parseYmd = (s: string) => {
+  const [y, m, d] = s.split("-").map(Number);
+  return new Date(y, m - 1, d);
+};
+
+export function addDays(day: string, n: number) {
+  const d = parseYmd(day);
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+
+/** Monday of the week containing `day` (yyyy-mm-dd), defaulting to today. */
+export function weekStart(day = localToday()) {
+  const d = parseYmd(day);
+  const back = (d.getDay() + 6) % 7; // Mon=0 … Sun=6
+  d.setDate(d.getDate() - back);
+  return ymd(d);
+}
+
+export const isWeekKey = (s: unknown): s is string => typeof s === "string" && /^\d{4}-\d{2}-\d{2}$/.test(s) && weekStart(s) === s;
+
+/** "12–18 Oct", or "29 Sep – 5 Oct" across months. */
+export function weekRange(ws: string) {
+  const a = parseYmd(ws);
+  const b = parseYmd(addDays(ws, 6));
+  return a.getMonth() === b.getMonth()
+    ? `${a.getDate()}–${b.getDate()} ${MONTHS[b.getMonth()]}`
+    : `${a.getDate()} ${MONTHS[a.getMonth()]} – ${b.getDate()} ${MONTHS[b.getMonth()]}`;
+}
+
+export function weekName(ws: string, today = localToday()) {
+  const cur = weekStart(today);
+  if (ws === cur) return "This week";
+  if (ws === addDays(cur, -7)) return "Last week";
+  if (ws === addDays(cur, 7)) return "Next week";
+  return `Week of ${formatDate(ws)}`;
+}

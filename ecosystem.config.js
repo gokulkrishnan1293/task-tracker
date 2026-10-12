@@ -13,6 +13,7 @@ module.exports = {
       node_args: "--disable-warning=ExperimentalWarning", // node:sqlite prints a one-time notice
       env: {
         NODE_ENV: "production",
+        TZ: "Asia/Kolkata",       // weeks (Mon–Sun) and "overdue" follow this timezone
         DB_PATH: __dirname + "/data/tracker.db",
         // COOKIE_SECURE: "true",   // set when served over HTTPS
       },

@@ -63,6 +63,10 @@ export type TaskRow = {
   acknowledged_at: string | null;
   deleted_at: string | null;
   note_count: number;
+  goal_id: number | null;
+  goal_title: string | null;
+  goal_week: string | null;
+  goal_linked_at: string | null;
 };
 
 export type Attention = { reason: string } | null;
@@ -89,3 +93,28 @@ export type ActivityItem =
     };
 
 export type Member = { id: number; name: string; username: string; role: Role; disabled_at: string | null };
+
+/** A project weekly goal option, for pickers. */
+export type GoalOption = { id: number; title: string; week_start: string };
+
+export type GoalTask = {
+  id: number;
+  title: string;
+  status: Status;
+  owner_name: string | null;
+  module_name: string;
+  module_slug: string;
+  goal_linked_at: string | null;
+};
+
+export type GoalSummary = GoalOption & {
+  created_by: number | null;
+  created_by_name: string | null;
+  created_at: string;
+  carried_from: number | null;
+  carried_from_week: string | null;
+  carried_to_week: string | null;
+  total: number;
+  done: number;
+  tasks: GoalTask[];
+};

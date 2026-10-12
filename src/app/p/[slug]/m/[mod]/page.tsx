@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { db } from "@/lib/db";
-import { activityFor, loadProject, membersOf, moduleBySlug, tasksIn } from "@/lib/queries";
+import { activityFor, goalOptions, loadProject, membersOf, moduleBySlug, tasksIn } from "@/lib/queries";
+import { addDays, weekStart } from "@/lib/util";
 import AppHeader from "@/components/AppHeader";
 import TaskBoard from "@/components/TaskBoard";
 
@@ -47,6 +48,7 @@ export default async function ModulePage({ params, searchParams }: { params: Par
         selected={selected}
         activity={activity}
         initialFilter={sp.f}
+        goals={goalOptions(project.id, addDays(weekStart(), -7))}
       />
     </>
   );

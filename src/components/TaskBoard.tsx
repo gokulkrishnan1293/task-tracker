@@ -4,10 +4,11 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { createTask, updateTask, type TaskPatch } from "@/app/actions/tasks";
-import type { ActivityItem, Status, TaskRow } from "@/lib/types";
-import { attentionOf, cx, formatDate, localToday, pct } from "@/lib/util";
+import type { ActivityItem, GoalOption, Status, TaskRow } from "@/lib/types";
+import { attentionOf, cx, formatDate, localToday, pct, weekRange, weekStart } from "@/lib/util";
 import { Button, inputBase, Progress } from "./ui";
 import TaskPanel from "./TaskPanel";
+import GoalSelect from "./GoalSelect";
 
 export type { Person } from "./StatusSelect";
 import { StatusSelect, type Person } from "./StatusSelect";
@@ -41,6 +42,7 @@ export default function TaskBoard(props: {
   selected: TaskRow | null;
   activity: ActivityItem[];
   initialFilter?: string;
+  goals: GoalOption[];
 }) {
   const { tasks, members, me, isAdmin, module } = props;
   const router = useRouter();
@@ -50,6 +52,7 @@ export default function TaskBoard(props: {
   const [toast, setToast] = useState<string>();
   const [q, setQ] = useState("");
   const [owner, setOwner] = useState<string>("");
+  const [goal, setGoal] = useState<string>(""); // "" any, "none", or a goal id
   const [filter, setFilterState] = useState<Filter>(
     FILTERS.some(([k]) => k === props.initialFilter) ? (props.initialFilter as Filter) : "all",
   );
@@ -130,6 +133,8 @@ export default function TaskBoard(props: {
     if (owner === "me" && t.owner_id !== me.id) return false;
     if (owner === "none" && t.owner_id != null) return false;
     if (owner && owner !== "me" && owner !== "none" && String(t.owner_id) !== owner) return false;
+    if (goal === "none" && t.goal_id != null) return false;
+    if (goal && goal !== "none" && String(t.goal_id) !== goal) return false;
     if (q && !t.title.toLowerCase().includes(q.toLowerCase())) return false;
     return true;
   });
@@ -194,6 +199,16 @@ export default function TaskBoard(props: {
             </div>
           </div>
 
+          <AddTask
+            moduleId={module.id}
+            isAdmin={isAdmin}
+            members={members}
+            me={me}
+            goals={props.goals}
+            goalFilter={goal && goal !== "none" ? goal : ""}
+            onError={notify}
+          />
+
           {/* Filters */}
           <div className="mb-3 flex flex-wrap items-center gap-2">
             <div className="flex flex-wrap gap-1 rounded-lg bg-surface p-1">
@@ -223,6 +238,16 @@ export default function TaskBoard(props: {
                 </option>
               ))}
             </select>
+            {props.goals.length > 0 && (
+              <GoalSelect
+                goals={props.goals}
+                value={goal}
+                onChange={setGoal}
+                noneLabel="Any goal"
+                className={cx(inputBase, "w-auto max-w-56", goal && "border-accent text-accent")}
+                aria-label="Filter by goal"
+              />
+            )}
             {isAdmin && (
               <label className="ml-auto flex items-center gap-1.5 text-xs text-muted">
                 <input type="checkbox" checked={props.showDeleted} onChange={(e) => setParams({ deleted: e.target.checked ? "1" : null })} />
@@ -264,12 +289,10 @@ export default function TaskBoard(props: {
             </table>
             {visible.length === 0 && (
               <p className="px-4 py-10 text-center text-sm text-muted">
-                {tasks.length === 0 ? "No tasks in this module yet. Add the first one below." : "No tasks match these filters."}
+                {tasks.length === 0 ? "No tasks in this module yet. Add the first one above." : "No tasks match these filters."}
               </p>
             )}
           </div>
-
-          <AddTask moduleId={module.id} isAdmin={isAdmin} members={members} me={me} onError={notify} />
 
           <p className="mt-3 text-xs text-muted">
             <kbd className="rounded border border-line px-1">↑</kbd> <kbd className="rounded border border-line px-1">↓</kbd> move between tasks ·{" "}
@@ -288,6 +311,7 @@ export default function TaskBoard(props: {
           activity={props.selected?.id === selectedTask.id ? props.activity : null}
           members={members}
           modules={props.modules}
+          goals={props.goals}
           me={me}
           isAdmin={isAdmin}
           editable={canEditTask(selectedTask, me, isAdmin)}
@@ -356,6 +380,12 @@ function Row({
             <span className={cx("line-clamp-2", t.status === "done" && "text-muted")}>{t.title}</span>
             <div className="mt-0.5 flex flex-wrap gap-1.5 empty:hidden">
               {attn && <span className="text-[11px] text-danger">{attn}</span>}
+              {t.goal_title && t.goal_week && (
+                <span className="max-w-64 truncate rounded bg-accent-soft px-1.5 text-[11px] text-accent" title={`Weekly goal · ${weekRange(t.goal_week)}`}>
+                  ◎ {t.goal_title}
+                  {t.goal_week !== weekStart() && <span className="opacity-70"> · {weekRange(t.goal_week)}</span>}
+                </span>
+              )}
               {isAdmin && !t.acknowledged_at && !t.deleted_at && (
                 <span className="rounded bg-accent-soft px-1.5 text-[11px] font-medium text-accent">New · by {t.created_by_name}</span>
               )}
@@ -409,17 +439,24 @@ function AddTask({
   isAdmin,
   members,
   me,
+  goals,
+  goalFilter,
   onError,
 }: {
   moduleId: number;
   isAdmin: boolean;
   members: Person[];
   me: Person;
+  goals: GoalOption[];
+  goalFilter: string;
   onError: (m: string) => void;
 }) {
   const [title, setTitle] = useState("");
   const [owner, setOwner] = useState<string>(isAdmin ? "" : String(me.id));
   const [due, setDue] = useState("");
+  // Follows the goal filter, so tasks added while viewing a goal land in it.
+  const [goal, setGoal] = useState(goalFilter);
+  useEffect(() => setGoal(goalFilter), [goalFilter]);
   const [pending, start] = useTransition();
   const ref = useRef<HTMLInputElement>(null);
 
@@ -429,14 +466,20 @@ function AddTask({
         e.preventDefault();
         if (!title.trim()) return;
         start(async () => {
-          const r = await createTask({ moduleId, title, ownerId: owner ? Number(owner) : null, dueDate: due || null });
+          const r = await createTask({
+            moduleId,
+            title,
+            ownerId: owner ? Number(owner) : null,
+            dueDate: due || null,
+            goalId: goal ? Number(goal) : null,
+          });
           if (!r.ok) return onError(r.error);
           setTitle("");
           setDue("");
           ref.current?.focus();
         });
       }}
-      className="mt-3 flex flex-wrap gap-2"
+      className="mb-4 flex flex-wrap gap-2 rounded-lg border border-line bg-surface p-2"
     >
       <input
         ref={ref}
@@ -445,8 +488,11 @@ function AddTask({
         placeholder={isAdmin ? "+ Add a task…" : "+ Add a task (assigned to you)…"}
         className={cx(inputBase, "min-w-60 flex-1")}
       />
+      {goals.length > 0 && (
+        <GoalSelect goals={goals} value={goal} onChange={setGoal} className={cx(inputBase, "w-48", !goal && "text-muted")} aria-label="Weekly goal" />
+      )}
       {isAdmin && (
-        <select value={owner} onChange={(e) => setOwner(e.target.value)} className={cx(inputBase, "w-40")} aria-label="Owner">
+        <select value={owner} onChange={(e) => setOwner(e.target.value)} className={cx(inputBase, "w-36")} aria-label="Owner">
           <option value="">Unassigned</option>
           {members.map((m) => (
             <option key={m.id} value={m.id}>
@@ -455,7 +501,7 @@ function AddTask({
           ))}
         </select>
       )}
-      <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={cx(inputBase, "w-40", !due && "text-muted")} aria-label="Due date" />
+      <input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={cx(inputBase, "w-36", !due && "text-muted")} aria-label="Due date" />
       <Button variant="primary" disabled={pending || !title.trim()}>
         Add
       </Button>

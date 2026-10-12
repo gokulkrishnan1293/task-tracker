@@ -6,7 +6,7 @@ import type { SQLInputValue } from "node:sqlite";
 import { db, tx } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { roleIn } from "@/lib/queries";
-import { check, isProjectMember, logChange, moduleName, run, taskCtx, userName } from "@/lib/guard";
+import { check, goalInProject, goalTitle, isProjectMember, logChange, moduleName, run, taskCtx, userName } from "@/lib/guard";
 import { STATUSES, STATUS_LABEL } from "@/lib/types";
 
 const refresh = () => revalidatePath("/", "layout");
@@ -15,7 +15,13 @@ const title = z.string().trim().min(1, "Title can't be empty.").max(500);
 
 // ── Create ───────────────────────────────────────────────────────────────
 
-export async function createTask(input: { moduleId: number; title: string; ownerId?: number | null; dueDate?: string | null }) {
+export async function createTask(input: {
+  moduleId: number;
+  title: string;
+  ownerId?: number | null;
+  dueDate?: string | null;
+  goalId?: number | null;
+}) {
   return run(async () => {
     const user = await requireUser();
     const mod = db.prepare("SELECT id, project_id FROM modules WHERE id = ? AND deleted_at IS NULL").get(input.moduleId) as
@@ -33,17 +39,20 @@ export async function createTask(input: { moduleId: number; title: string; owner
       owner = input.ownerId ?? null;
       if (owner != null) check(isProjectMember(mod.project_id, owner) || owner === user.id, "That person isn't in this project.");
     }
+    const goal = input.goalId ?? null;
+    if (goal != null) goalInProject(goal, mod.project_id);
 
     const id = tx(() => {
       const max = db.prepare("SELECT coalesce(max(sort_order), 0) m FROM tasks WHERE module_id = ?").get(mod.id) as { m: number };
       const info = db
         .prepare(
-          `INSERT INTO tasks (module_id, title, owner_id, due_date, sort_order, created_by, acknowledged_at)
-           VALUES (?, ?, ?, ?, ?, ?, ${role === "admin" ? "datetime('now')" : "NULL"})`,
+          `INSERT INTO tasks (module_id, title, owner_id, due_date, sort_order, created_by, goal_id, goal_linked_at, acknowledged_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ${goal != null ? "datetime('now')" : "NULL"}, ${role === "admin" ? "datetime('now')" : "NULL"})`,
         )
-        .run(mod.id, t, owner, due, max.m + 1, user.id);
+        .run(mod.id, t, owner, due, max.m + 1, user.id, goal);
       const taskId = Number(info.lastInsertRowid);
       logChange(taskId, user.id, "created");
+      if (goal != null) logChange(taskId, user.id, "updated", "goal", null, goalTitle(goal));
       return taskId;
     });
     refresh();
@@ -60,6 +69,7 @@ const patchSchema = z
     ownerId: z.number().int().nullable(),
     dueDate: date.nullable(),
     moduleId: z.number().int(),
+    goalId: z.number().int().nullable(),
   })
   .partial();
 
@@ -84,6 +94,7 @@ export async function updateTask(taskId: number, raw: TaskPatch) {
     if (patch.ownerId != null && patch.ownerId !== task.owner_id) {
       check(isProjectMember(projectId, patch.ownerId), "That person isn't in this project.");
     }
+    if (patch.goalId != null && patch.goalId !== task.goal_id) goalInProject(patch.goalId, projectId);
     if (patch.moduleId !== undefined && patch.moduleId !== task.module_id) {
       const target = db.prepare("SELECT project_id FROM modules WHERE id = ? AND deleted_at IS NULL").get(patch.moduleId) as
         | { project_id: number }
@@ -113,6 +124,11 @@ export async function updateTask(taskId: number, raw: TaskPatch) {
       if (patch.dueDate !== undefined && patch.dueDate !== task.due_date) {
         set("due_date", patch.dueDate);
         logChange(taskId, user.id, "updated", "due_date", task.due_date, patch.dueDate);
+      }
+      if (patch.goalId !== undefined && patch.goalId !== task.goal_id) {
+        set("goal_id", patch.goalId);
+        sets.push(patch.goalId == null ? "goal_linked_at = NULL" : "goal_linked_at = datetime('now')");
+        logChange(taskId, user.id, "updated", "goal", goalTitle(task.goal_id), goalTitle(patch.goalId));
       }
       if (patch.moduleId !== undefined && patch.moduleId !== task.module_id) {
         set("module_id", patch.moduleId);
