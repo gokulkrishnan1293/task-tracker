@@ -1,6 +1,4 @@
-import { deletedModules, goalsForWeek, loadProject, modulesFor, projectStats } from "@/lib/queries";
-import { isWeekKey, weekStart } from "@/lib/util";
-import GoalsStrip from "@/components/GoalsStrip";
+import { deletedModules, loadProject, modulesFor, projectStats } from "@/lib/queries";
 import AppHeader from "@/components/AppHeader";
 import ProjectHeader from "@/components/ProjectHeader";
 import ModuleCard from "@/components/ModuleCard";
@@ -12,16 +10,8 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   return { title: project.name };
 }
 
-export default async function ProjectPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ slug: string }>;
-  searchParams: Promise<{ week?: string }>;
-}) {
+export default async function ProjectPage({ params }: { params: Promise<{ slug: string }> }) {
   const { user, project, role } = await loadProject((await params).slug);
-  const sp = await searchParams;
-  const week = isWeekKey(sp.week) ? sp.week : weekStart();
   const isAdmin = role === "admin";
   const modules = modulesFor(project.id);
   const stats = projectStats(project.id);
@@ -50,14 +40,6 @@ export default async function ProjectPage({
       <AppHeader user={user} crumbs={[{ label: project.name }]} />
       <main className="mx-auto max-w-[1400px] px-4 py-6 md:px-6">
         <ProjectHeader project={project} stats={stats} role={role} siteAdmin={!!user.is_site_admin} tab="modules" />
-        <GoalsStrip
-          projectId={project.id}
-          projectSlug={project.slug}
-          week={week}
-          goals={goalsForWeek(project.id, week)}
-          meId={user.id}
-          isAdmin={isAdmin}
-        />
         {modules.length === 0 ? (
           <Empty title="No modules yet">
             {isAdmin ? "Modules group the tasks in a project. Create the first one with “+ New module”." : "An admin needs to create modules first."}

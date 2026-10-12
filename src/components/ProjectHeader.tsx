@@ -15,7 +15,7 @@ export default function ProjectHeader({
   stats: Stats;
   role: Role;
   siteAdmin: boolean;
-  tab: "modules" | "members";
+  tab: "modules" | "goals" | "members";
 }) {
   const base = `/p/${project.slug}`;
   return (
@@ -52,6 +52,7 @@ export default function ProjectHeader({
         {(
           [
             ["modules", "Modules", base],
+            ["goals", "Weekly goals", `${base}/goals`],
             ["members", "Members", `${base}/members`],
           ] as const
         ).map(([key, label, href]) => (

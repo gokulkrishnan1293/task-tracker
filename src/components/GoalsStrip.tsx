@@ -30,14 +30,13 @@ export default function GoalsStrip({
   const [error, setError] = useState<string>();
   const [pending, start] = useTransition();
   const current = weekStart();
-  const href = (w: string) => `/p/${projectSlug}${w === current ? "" : `?week=${w}`}`;
+  const href = (w: string) => `/p/${projectSlug}/goals${w === current ? "" : `?week=${w}`}`;
   const isPast = week < current;
 
   return (
-    <section className="mb-8">
+    <section>
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <h2 className="text-xs font-medium uppercase tracking-wide text-muted">Weekly goals</h2>
-        <div className="ml-2 flex items-center gap-1 text-sm">
+        <div className="flex items-center gap-1 text-sm">
           <Link href={href(addDays(week, -7))} className="grid size-7 place-items-center rounded text-muted hover:bg-surface hover:text-fg" aria-label="Previous week">
             ‹
           </Link>
