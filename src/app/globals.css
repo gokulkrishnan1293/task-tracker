@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-raised: var(--raised);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-done: var(--done);
+  --color-done-soft: var(--done-soft);
+  --color-open: var(--open);
+  --color-open-soft: var(--open-soft);
+  --color-review: var(--review);
+  --color-review-soft: var(--review-soft);
+  --color-pending: var(--pending);
+  --color-pending-soft: var(--pending-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --font-sans: ui-sans-serif, -apple-system, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+:root {
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #f7f7f8;
+  --raised: #ffffff;
+  --line: #e6e6e9;
+  --fg: #18181b;
+  --muted: #71717a;
+  --accent: #2563eb;
+  --accent-soft: #eff4ff;
+  --done: #16a34a;
+  --done-soft: #ecfdf3;
+  --open: #d97706;
+  --open-soft: #fef6e7;
+  --review: #7c3aed;
+  --review-soft: #f4effe;
+  --pending: #8e8e98;
+  --pending-soft: #f1f1f3;
+  --danger: #dc2626;
+  --danger-soft: #fdf0f0;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #0b0b0c;
+    --surface: #131315;
+    --raised: #18181b;
+    --line: #26262a;
+    --fg: #ededef;
+    --muted: #8b8b93;
+    --accent: #3b82f6;
+    --accent-soft: #15203a;
+    --done: #22c55e;
+    --done-soft: #10261a;
+    --open: #f59e0b;
+    --open-soft: #2a1f0c;
+    --review: #a78bfa;
+    --review-soft: #221a38;
+    --pending: #7a7a83;
+    --pending-soft: #1d1d21;
+    --danger: #ef4444;
+    --danger-soft: #2c1414;
+  }
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 14px;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@keyframes slide-in {
+  from { transform: translateX(16px); opacity: 0; }
+  to { transform: none; opacity: 1; }
+}
+.panel-in { animation: slide-in 150ms ease-out; }
